@@ -30,10 +30,10 @@ A web application that generates highly personalized cold outreach emails at sca
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, React Router, Axios, Plain CSS |
+| Frontend | React, React Router, Axios, Plain CSS |
 | Backend | Node.js, Express.js |
-| Database | PostgreSQL 16 |
-| AI | Google Gemini API (`@google/generative-ai`) |
+| Database | PostgreSQL 16 (port 5433 — Homebrew default) |
+| AI | Google Gemini API (`gemini-3.5-flash` via `@google/genai`) |
 | Ports | Frontend: 3000, Backend: 5001 |
 
 ## Prerequisites
@@ -76,20 +76,20 @@ Edit `.env` in the project root and set your Gemini API key:
 
 ```
 GEMINI_API_KEY=your_actual_api_key_here
-DATABASE_URL=postgresql://localhost/ai_cold_email_factory
+DATABASE_URL=postgresql://localhost:5433/ai_cold_email_factory
 PORT=5001
 ```
 
 ### Step 6: Run Database Schema
 
 ```bash
-psql ai_cold_email_factory -f backend/schema.sql
+psql -p 5433 -d ai_cold_email_factory -f backend/schema.sql
 ```
 
 ### Step 7: (Optional) Load Sample Data
 
 ```bash
-psql ai_cold_email_factory -f backend/seed.sql
+psql -p 5433 -d ai_cold_email_factory -f backend/seed.sql
 ```
 
 This loads dummy data for "TechForge Solutions" — a fictional IT consulting company.
@@ -116,6 +116,57 @@ npm start
 ```
 
 The app will be available at **http://localhost:3000**.
+
+## Git & GitHub Setup
+
+If you'd like to push this project to GitHub for submission or collaboration:
+
+```bash
+# 1. Create a new repository on GitHub (e.g. "ai-cold-email-factory")
+#    Do NOT initialize it with README, .gitignore, or license.
+
+# 2. Link your local repo to GitHub (replace USER/REPO with your values)
+git remote add origin https://github.com/YOUR_USERNAME/ai-cold-email-factory.git
+
+# 3. Stage all current files and commit
+git add .
+git commit -m "Complete AI Cold Email Factory with Gemini 3.5 Flash"
+
+# 4. Push to GitHub
+git push -u origin main
+```
+
+**Important:** The `.gitignore` already excludes `node_modules/`, `.env`, and `build/` folders. Your API key stays safe locally.
+
+## Database Access
+
+PostgreSQL was installed via Homebrew and runs on port 5433. Here's how to inspect the data:
+
+```bash
+# Quick queries (no interactive shell)
+psql -p 5433 -d ai_cold_email_factory -c "SELECT COUNT(*) FROM generated_emails;"
+psql -p 5433 -d ai_cold_email_factory -c "SELECT id, recipient_name, subject_line FROM generated_emails LIMIT 10;"
+psql -p 5433 -d ai_cold_email_factory -c "SELECT * FROM email_batches ORDER BY id DESC;"
+
+# Interactive psql shell
+psql -p 5433 -d ai_cold_email_factory
+
+  # Inside psql, useful commands:
+  \dt             # List all tables
+  \d+ companies   # Show table schema and columns
+  SELECT * FROM companies;
+  SELECT * FROM target_industries;
+  SELECT * FROM generated_emails ORDER BY id DESC LIMIT 20;
+  \q              # Quit
+
+# pgAdmin (GUI alternative):
+# Open the pgAdmin app → Add Server
+#   Name: AI Cold Email Factory
+#   Host: localhost, Port: 5433
+#   Database: ai_cold_email_factory
+#   Username: (your macOS username), Password: (leave blank)
+# No password needed — Homebrew PostgreSQL uses peer/trust authentication by default.
+```
 
 ## Usage Guide
 
@@ -153,13 +204,28 @@ The app will be available at **http://localhost:3000**.
 | GET | `/api/generate/status/:batchId` | Get generation progress |
 | GET | `/api/batches` | List all batches |
 | DELETE | `/api/batches/:id` | Delete batch |
-| GET | `/api/emails/:batchId` | Get emails (with filters) |
-| GET | `/api/emails/:batchId/csv` | Download CSV |
-| GET | `/api/emails/detail/:id` | Get single email |
-| PUT | `/api/emails/:id` | Update email (mark sent) |
+| GET | `/api/emails/:batchId` | Get emails for batch (with search, cta, hook filters) |
+| GET | `/api/emails/:batchId/csv` | Download batch as CSV |
+| GET | `/api/emails/detail/:id` | Get single email detail |
+| PUT | `/api/emails/:id` | Update email (mark as sent) |
 | DELETE | `/api/emails/:id` | Delete email |
+| GET | `/api/health` | Health check endpoint |
 
-## AI Prompt Strategy
+## AI Model Selection: Why Gemini 3.5 Flash
+
+We evaluated all free-tier Gemini models and selected `gemini-3.5-flash` (released May 2026) as the best balance of quality, speed, and rate limits:
+
+| Model | RPM | RPD | Output Limit | Quality | Verdict |
+|-------|-----|-----|-------------|---------|---------|
+| **gemini-3.5-flash** | ~10 | 1,500 | 65,536 tokens | ★★★★★ Best | ✅ Selected |
+| gemini-3.1-flash-lite | ~15 | 1,500 | 8,192 tokens | ★★★★☆ | Lower output limit |
+| gemini-2.0-flash-lite | ~30 | 1,500 | 8,192 tokens | ★★★☆☆ | Older, lower quality |
+
+**Why not Flash-Lite?** Its 8K output token limit caused JSON truncation during testing — emails were cut off mid-generation. Gemini 3.5 Flash's 65K output limit eliminates this issue entirely.
+
+**Rate limit strategy:** At ~10 RPM with 5 emails per call, we can generate ~7,500 emails per day on the free tier. The app splits large batches into concurrent sub-batches of 5, with exponential backoff on retries.
+
+## Prompt Engineering Strategy
 
 The Gemini prompt is carefully engineered to ensure variety across 5 dimensions:
 
@@ -172,24 +238,40 @@ The Gemini prompt is carefully engineered to ensure variety across 5 dimensions:
 ## Assumptions Made
 
 - Single company per deployment (no multi-tenancy)
-- PostgreSQL runs locally on default port (5432)
-- Gemini 2.0 Flash model is used for generation
-- Email generation happens asynchronously with polling-based progress
-- A maximum of 500 emails per batch to respect API rate limits
-- Three concurrent Gemini API calls maximum to avoid throttling
+- PostgreSQL runs locally on port 5433 (Homebrew PostgreSQL 16 default)
+- Gemini 3.5 Flash (`gemini-3.5-flash`) is the generation model — the fastest, cheapest Gemini model as of May 2026 with 1,500 requests/day on the free tier
+- Email generation happens asynchronously via `setImmediate` with polling-based progress tracking
+- Maximum 500 emails per batch to stay within daily free-tier API quotas
+- Sub-batches of 5 emails per API call for reliable JSON responses
+- Three concurrent Gemini API calls maximum to avoid hitting the 10 RPM rate limit
+- Single-page application served separately from the API backend
 
 ## Features to Add With More Time
 
-- **Email Sending Integration** (SendGrid, AWS SES, SMTP)
-- **A/B Testing** for subject lines and CTAs
-- **Spam Score Checker** before finalizing emails
-- **Rate Limiting** — Daily sending quotas per industry
-- **User Authentication** for multi-tenant use
-- **Email Template Editor** with drag-and-drop
-- **Analytics Dashboard** — Track open rates, reply rates, bounce rates
-- **Scheduled Sending** with timezone-aware delivery
-- **Lead Import** from CSV/CRM integration (HubSpot, Salesforce)
-- **Language & Tone Customization** per recipient
+### Email Operations
+- **Email Sending Integration** — Connect SendGrid, AWS SES, or SMTP to send campaigns directly from the app
+- **Reply Detection** — Auto-detect replies via webhooks and mark engaged leads
+- **Scheduled Sending** — Timezone-aware delivery queues with daily sending caps per industry (following CAN-SPAM best practices)
+- **Bounce & Spam Tracking** — Parse delivery webhooks to remove invalid addresses
+
+### Content & Quality
+- **A/B Testing** — Generate multiple subject line / CTA variants per recipient, track which performs best
+- **Spam Score Checker** — Pre-send checks using SpamAssassin or similar
+- **Email Template Editor** — Drag-and-drop editor to customize the email HTML layout
+- **Language & Tone Customization** — Adjust formality, length, and cultural references per recipient persona
+
+### Analytics & CRM
+- **Analytics Dashboard** — Open rates, reply rates, bounce rates, and conversion tracking
+- **Lead Scoring** — Score recipients based on engagement signals
+- **CRM Integration** — Import leads from HubSpot, Salesforce, or CSV; sync sent emails and replies back
+- **Pipeline Tracking** — Track email → reply → meeting → deal conversion
+
+### Platform & Scale
+- **User Authentication** — Multi-tenant accounts with team collaboration
+- **Batch API** — Use Gemini's Batch API endpoint for higher throughput (avoids 10 RPM limit)
+- **Rate Limit Mgmt** — Adaptive rate limiter that respects daily quotas and backs off on 429s
+- **CSV Lead Import** — Bulk upload recipient lists with merge tag mapping
+- **Deployment** — Docker setup for one-command deployment to any cloud provider
 
 ## License
 
