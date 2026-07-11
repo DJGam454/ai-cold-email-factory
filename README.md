@@ -1,5 +1,6 @@
 # AI Cold Email Factory
 
+Hosted link: https://e5ca-2405-201-4000-b825-64e2-bd3f-f8ff-2d57.ngrok-free.app/
 A web application that generates highly personalized cold outreach emails at scale using AI. Built with React, Express, Node.js, PostgreSQL, and multiple AI providers.
 
 ## Features
