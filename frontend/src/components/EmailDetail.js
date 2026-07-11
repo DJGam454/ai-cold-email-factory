@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { emailsApi } from '../utils/api';
 import Modal from './Modal';
 
 function EmailDetail({ email, onClose }) {
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+
   if (!email) return null;
+
+  async function handleSend() {
+    setSending(true);
+    setSendResult(null);
+    try {
+      await emailsApi.sendEmail(email.id);
+      setSendResult({ type: 'success', message: 'Sent! Check your inbox.' });
+    } catch (err) {
+      setSendResult({ type: 'error', message: err.response?.data?.error || 'Failed to send' });
+    }
+    setSending(false);
+  }
 
   return (
     <Modal title="Email Preview" onClose={onClose}>
@@ -29,6 +45,17 @@ function EmailDetail({ email, onClose }) {
       <div className="form-group">
         <label className="form-label">CTA</label>
         <div className="form-input" style={{ background: '#f8f9fa' }}>{email.cta_text}</div>
+      </div>
+
+      <div style={{ borderTop: '1px solid #e9ecef', paddingTop: 16, marginTop: 16 }}>
+        <button className="btn btn-success" onClick={handleSend} disabled={sending || sendResult?.type === 'success'} style={{ width: '100%' }}>
+          {sending ? 'Sending...' : sendResult?.type === 'success' ? 'Sent!' : 'Send Test Email'}
+        </button>
+        {sendResult && (
+          <p style={{ marginTop: 8, fontSize: 13, color: sendResult.type === 'success' ? '#155724' : '#dc3545', textAlign: 'center' }}>
+            {sendResult.message}
+          </p>
+        )}
       </div>
     </Modal>
   );

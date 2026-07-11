@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const nodemailer = require('nodemailer');
 
 router.get('/:batchId', async (req, res) => {
   try {
@@ -110,6 +111,121 @@ router.get('/:batchId/csv', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=emails_batch_${batchId}.csv`);
     res.send(csv);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function createTransporter() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
+    return null;
+  }
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: parseInt(SMTP_PORT),
+    secure: parseInt(SMTP_PORT) === 465,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+  });
+}
+
+router.post('/send/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('SELECT * FROM generated_emails WHERE id=$1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Email not found' });
+    }
+    const email = result.rows[0];
+
+    const transporter = createTransporter();
+    if (!transporter) {
+      return res.status(400).json({ error: 'SMTP not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS in .env' });
+    }
+
+    const emailTo = process.env.EMAIL_TO || process.env.SMTP_USER;
+    const info = await transporter.sendMail({
+      from: `"AI Cold Email Factory" <${process.env.SMTP_USER}>`,
+      to: emailTo,
+      subject: `[Test] ${email.subject_line}`,
+      text: `To: ${email.recipient_name} — ${email.recipient_title} at ${email.recipient_company}\n\nSubject: ${email.subject_line}\n\n${email.email_body}\n\n---\nCTA: ${email.cta_text}\n`,
+      html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #6c757d;">
+          <strong>Test Send</strong> — originally for ${email.recipient_name} (${email.recipient_title}) at ${email.recipient_company}
+        </div>
+        <h2 style="color: #1a1a2e;">${email.subject_line}</h2>
+        ${email.opening_hook ? `<p style="color: #6c757d; font-style: italic;">${email.opening_hook}</p>` : ''}
+        <div style="white-space: pre-wrap; line-height: 1.6; color: #333;">${email.email_body}</div>
+        <div style="margin-top: 16px; padding: 12px; background: #e94560; color: white; border-radius: 8px; text-align: center; font-weight: 600;">
+          ${email.cta_text}
+        </div>
+      </div>`,
+    });
+
+    await db.query('UPDATE generated_emails SET is_sent=true WHERE id=$1', [id]);
+
+    console.log('[EMAILS] Sent email #' + id + ' to ' + emailTo + ' — messageId: ' + info.messageId);
+    res.json({ success: true, messageId: info.messageId, to: emailTo });
+  } catch (err) {
+    console.error('[EMAILS] Send error for email #' + req.params.id + ':', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/send-batch', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids must be a non-empty array' });
+    }
+
+    const transporter = createTransporter();
+    if (!transporter) {
+      return res.status(400).json({ error: 'SMTP not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS in .env' });
+    }
+
+    const emailTo = process.env.EMAIL_TO || process.env.SMTP_USER;
+    const results = await Promise.allSettled(
+      ids.map(async (id) => {
+        const result = await db.query('SELECT * FROM generated_emails WHERE id=$1', [id]);
+        if (result.rows.length === 0) {
+          return { id, status: 'failed', error: 'Email not found' };
+        }
+        const email = result.rows[0];
+        const info = await transporter.sendMail({
+          from: `"AI Cold Email Factory" <${process.env.SMTP_USER}>`,
+          to: emailTo,
+          subject: `[Test] ${email.subject_line}`,
+          text: `To: ${email.recipient_name} — ${email.recipient_title} at ${email.recipient_company}\n\nSubject: ${email.subject_line}\n\n${email.email_body}\n\n---\nCTA: ${email.cta_text}\n`,
+          html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #6c757d;">
+              <strong>Test Send</strong> — originally for ${email.recipient_name} (${email.recipient_title}) at ${email.recipient_company}
+            </div>
+            <h2 style="color: #1a1a2e;">${email.subject_line}</h2>
+            ${email.opening_hook ? `<p style="color: #6c757d; font-style: italic;">${email.opening_hook}</p>` : ''}
+            <div style="white-space: pre-wrap; line-height: 1.6; color: #333;">${email.email_body}</div>
+            <div style="margin-top: 16px; padding: 12px; background: #e94560; color: white; border-radius: 8px; text-align: center; font-weight: 600;">
+              ${email.cta_text}
+            </div>
+          </div>`,
+        });
+        await db.query('UPDATE generated_emails SET is_sent=true WHERE id=$1', [id]);
+        return { id, status: 'sent', messageId: info.messageId };
+      })
+    );
+
+    const sent = results.filter(r => r.status === 'fulfilled' && r.value.status === 'sent').map(r => r.value.id);
+    const failed = results.filter(r => r.status === 'rejected' || r.value.status === 'failed').map(r => ({
+      id: r.value?.id || 'unknown',
+      error: r.reason?.message || r.value?.error || 'Failed to send',
+    }));
+
+    console.log('[EMAILS] Batch send: ' + sent.length + ' sent, ' + failed.length + ' failed');
+    res.json({ sent, failed, total: ids.length });
+  } catch (err) {
+    console.error('[EMAILS] Batch send error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -99,16 +99,68 @@ function Dashboard() {
       )}
 
       {company && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="card-header">
-            <span className="card-title">Quick Actions</span>
+        <>
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-header">
+              <span className="card-title">Quick Actions</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <Link to="/setup" className="btn btn-primary">Manage Data</Link>
+              <Link to="/generate" className="btn btn-success">Generate Emails</Link>
+              <Link to="/batches" className="btn btn-secondary">View Batches</Link>
+              {stats.batches === 0 && (
+                <button className="btn btn-outline" onClick={async () => {
+                  await api.post('/seed-demo');
+                  loadData();
+                }}>Quick Start</button>
+              )}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Link to="/setup" className="btn btn-primary">Manage Data</Link>
-            <Link to="/generate" className="btn btn-success">Generate Emails</Link>
-            <Link to="/batches" className="btn btn-secondary">View Batches</Link>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <span className="card-title">How to Use</span>
+            </div>
+            <ol className="steps-list">
+              <li>
+                <span className="step-number">1</span>
+                <div className="step-content">
+                  <div className="step-title">Set up your company</div>
+                  <div className="step-desc">
+                    Go to <strong>Setup</strong> and add your company name, description, services, case studies, and pricing plans. This data powers every generated email.
+                  </div>
+                </div>
+              </li>
+              <li>
+                <span className="step-number">2</span>
+                <div className="step-content">
+                  <div className="step-title">Add target industries</div>
+                  <div className="step-desc">
+                    In <strong>Setup</strong>, define the industries you want to reach (e.g. Financial Services, Healthcare, Retail). Each industry gets its own set of personalized emails.
+                  </div>
+                </div>
+              </li>
+              <li>
+                <span className="step-number">3</span>
+                <div className="step-content">
+                  <div className="step-title">Generate emails</div>
+                  <div className="step-desc">
+                    Go to <strong>Generate</strong>, pick a target industry, set the count (1-500), and click start. Watch real-time progress as AI crafts each email.
+                  </div>
+                </div>
+              </li>
+              <li>
+                <span className="step-number">4</span>
+                <div className="step-content">
+                  <div className="step-title">Review & export</div>
+                  <div className="step-desc">
+                    Browse results in <strong>Batches</strong>, click any batch to see all emails. Filter by CTA type or keyword, then download as CSV for your email campaigns.
+                  </div>
+                </div>
+              </li>
+            </ol>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

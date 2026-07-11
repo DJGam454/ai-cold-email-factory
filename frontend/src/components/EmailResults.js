@@ -11,6 +11,9 @@ function EmailResults() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ cta: '', hook: '', search: '' });
   const [selectedEmail, setSelectedEmail] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [sending, setSending] = useState(false);
+  const [sendStatus, setSendStatus] = useState(null);
 
   const limit = 50;
 
@@ -50,6 +53,36 @@ function EmailResults() {
     }
   }
 
+  function toggleSelect(id) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === emails.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(emails.map(e => e.id)));
+    }
+  }
+
+  async function sendSelected() {
+    if (selected.size === 0) return;
+    setSending(true);
+    setSendStatus(null);
+    try {
+      const res = await emailsApi.sendBatchEmails(Array.from(selected));
+      const data = res.data;
+      setSendStatus({ type: 'success', message: `Sent ${data.sent.length}/${data.total} emails` });
+      setSelected(new Set());
+      loadEmails();
+    } catch (err) {
+      setSendStatus({ type: 'error', message: err.response?.data?.error || 'Failed to send emails' });
+    }
+    setSending(false);
+  }
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -57,10 +90,21 @@ function EmailResults() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 style={{ fontSize: 24 }}>Batch #{batchId} — {total} Emails</h1>
         <div style={{ display: 'flex', gap: 12 }}>
+          {selected.size > 0 && (
+            <button className="btn btn-success btn-sm" onClick={sendSelected} disabled={sending}>
+              {sending ? 'Sending...' : `Send Selected (${selected.size})`}
+            </button>
+          )}
           <Link to="/batches" className="btn btn-secondary btn-sm">Back to Batches</Link>
-          <a href={emailsApi.getCsvUrl(batchId)} className="btn btn-success btn-sm" download>Download CSV</a>
+          <a href={emailsApi.getCsvUrl(batchId)} className="btn btn-outline btn-sm" download>Download CSV</a>
         </div>
       </div>
+
+      {sendStatus && (
+        <div className="card" style={{ padding: '12px 24px', marginBottom: 16, background: sendStatus.type === 'success' ? '#d4edda' : '#f8d7da', color: sendStatus.type === 'success' ? '#155724' : '#721c24' }}>
+          {sendStatus.message}
+        </div>
+      )}
 
       <div className="card">
         <div className="filter-bar">
@@ -95,20 +139,28 @@ function EmailResults() {
             <table className="table">
               <thead>
                 <tr>
+                  <th style={{ width: 40 }}>
+                    <input type="checkbox" onChange={toggleSelectAll} checked={emails.length > 0 && selected.size === emails.length} />
+                  </th>
                   <th>Recipient</th>
                   <th>Company</th>
                   <th>Subject</th>
                   <th>CTA</th>
+                  <th>Sent</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {emails.map((e) => (
-                  <tr key={e.id}>
+                  <tr key={e.id} style={{ background: selected.has(e.id) ? '#f0f7ff' : 'transparent' }}>
+                    <td>
+                      <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} />
+                    </td>
                     <td>{e.recipient_name}<br /><span style={{ fontSize: 12, color: '#6c757d' }}>{e.recipient_title}</span></td>
                     <td>{e.recipient_company}</td>
-                    <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject_line}</td>
+                    <td style={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject_line}</td>
                     <td><span className="badge badge-active">{e.cta_type}</span></td>
+                    <td>{e.is_sent ? <span className="badge badge-completed">Yes</span> : <span className="badge badge-pending">No</span>}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn btn-sm btn-outline" onClick={() => setSelectedEmail(e)}>View</button>

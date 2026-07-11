@@ -8,6 +8,7 @@ function EmailGenerator() {
   const [industries, setIndustries] = useState([]);
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [emailCount, setEmailCount] = useState(10);
+  const [model, setModel] = useState('gemini');
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [batchId, setBatchId] = useState(null);
@@ -76,6 +77,7 @@ function EmailGenerator() {
         company_id: company.id,
         target_industry_id: parseInt(selectedIndustry),
         count: parseInt(emailCount),
+        model: model,
       });
       setBatchId(res.data.batchId);
     } catch (err) {
@@ -121,6 +123,16 @@ function EmailGenerator() {
         <div className="form-group">
           <label className="form-label">Number of Emails to Generate (1-500)</label>
           <input className="form-input" type="number" min="1" max="500" value={emailCount} onChange={(e) => setEmailCount(e.target.value)} disabled={generating} />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">AI Model</label>
+          <select className="form-select" value={model} onChange={(e) => setModel(e.target.value)} disabled={generating}>
+            <option value="gemini">Gemini (Cloud)</option>
+            <option value="groq:llama-3.1-8b-instant">Groq — Llama 3.1 8B (Fast)</option>
+            <option value="groq:llama-3.3-70b-versatile">Groq — Llama 3.3 70B (Best Quality)</option>
+            <option value="ollama">Llama 3.2 1B (Local — Ollama)</option>
+          </select>
         </div>
 
         <button className="btn btn-primary" onClick={startGeneration} disabled={generating}>

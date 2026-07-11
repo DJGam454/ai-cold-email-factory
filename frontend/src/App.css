@@ -34,6 +34,37 @@
   gap: 24px;
 }
 
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.hamburger-line {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #a0a0b8;
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+
+.hamburger-line.open:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-line.open:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-line.open:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
 .navbar-links a {
   color: #a0a0b8;
   text-decoration: none;
@@ -407,6 +438,53 @@
   color: #6c757d;
 }
 
+.steps-list {
+  list-style: none;
+  padding: 0;
+}
+
+.steps-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.steps-list li:last-child {
+  border-bottom: none;
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  background: #1a1a2e;
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 4px;
+}
+
+.step-desc {
+  font-size: 14px;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
 @media (max-width: 768px) {
   .main-content {
     padding: 16px;
@@ -423,8 +501,66 @@
   }
   .navbar {
     padding: 0 16px;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 60px;
+  }
+  .navbar-brand {
+    font-size: 16px;
+    margin-right: auto;
+  }
+  .hamburger {
+    display: flex;
   }
   .navbar-links {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 0 12px;
+  }
+  .navbar-links-open {
+    display: flex;
+  }
+  .navbar-links a {
+    padding: 10px 0;
+    border-bottom: none;
+  }
+  .filter-bar .form-input,
+  .filter-bar .form-select {
+    width: 100%;
+    min-width: auto;
+  }
+  .item-list li {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .item-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .steps-list li {
     gap: 12px;
+  }
+  .step-number {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar-brand {
+    font-size: 14px;
+  }
+  .main-content {
+    padding: 12px;
+  }
+  .card {
+    padding: 16px;
+  }
+  .stat-value {
+    font-size: 24px;
   }
 }

@@ -1,30 +1,52 @@
 # AI Cold Email Factory
 
-A web application that generates highly personalized cold outreach emails at scale using AI. Built with React, Express, Node.js, PostgreSQL, and Google Gemini API.
+A web application that generates highly personalized cold outreach emails at scale using AI. Built with React, Express, Node.js, PostgreSQL, and multiple AI providers.
 
 ## Features
 
 - **Company Profile Management** — CRUD for company info, services, case studies, pricing, and target industries
-- **AI Email Generation** — Generate up to 500 unique cold emails with varied subject lines, hooks, CTAs, and body structures
+- **AI Email Generation** — Generate up to 500 unique cold emails with 3 AI providers: Gemini, Groq (Llama 3.1), or local Ollama
+- **Send Test Emails** — Select any generated email and send it to your inbox via SMTP to preview how it looks
 - **Real-time Progress Tracking** — Polling-based progress indicator during generation
 - **Smart Variety** — Emails differ across 5 subject patterns, 5 hook styles, 5 CTA types, and 5 body structures
 - **CSV Export** — Download generated emails as CSV for import into email tools
 - **Search & Filter** — Filter emails by CTA type, opening hook, or keyword search
+- **Bulk Select & Send** — Check multiple emails and send them all at once
 - **Clean Responsive UI** — Mobile-friendly design with plain CSS
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌────────────┐
-│  React App  │────▶│  Express API │────▶│ PostgreSQL │
-│  (Port 3000)│     │  (Port 5001) │     │   Database  │
-└─────────────┘     └──────┬───────┘     └────────────┘
-                           │
-                    ┌──────▼───────┐
-                    │  Google      │
-                    │  Gemini API  │
-                    └──────────────┘
+                         ┌─────────────────┐
+                         │   Browser        │
+                         │ (React SPA)      │
+                         └────────┬────────┘
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │    Express Server           │
+                    │  (Port 5002)               │
+                    │  ┌─────────┐  ┌──────────┐ │
+                    │  │ Static  │  │  API     │ │
+                    │  │ Assets  │  │ Routes   │ │
+                    │  └─────────┘  └────┬─────┘ │
+                    └────────────────────┼───────┘
+                                         │
+                    ┌────────────────────▼───────┐
+                    │         PostgreSQL          │
+                    │      (Port 5433)            │
+                    └────────────────────────────┘
+                                         │
+                    ┌────────────────────▼───────┐
+                    │   AI Providers:             │
+                    │   • Gemini (gemini-3.5-flash)│
+                    │   • Groq (llama-3.1-8b)     │
+                    │   • Ollama (local)          │
+                    └────────────────────────────┘
 ```
+
+**Production mode:** The Express server on port 5002 serves both the React build (static files) and the REST API. One port, one ngrok tunnel.
+
+**Development mode:** React dev server on port 3000 proxies `/api/*` calls to port 5002 via the `"proxy"` setting in `package.json`, enabling hot-reload.
 
 ### Tech Stack
 
@@ -33,14 +55,15 @@ A web application that generates highly personalized cold outreach emails at sca
 | Frontend | React, React Router, Axios, Plain CSS |
 | Backend | Node.js, Express.js |
 | Database | PostgreSQL 16 (port 5433 — Homebrew default) |
-| AI | Google Gemini API (`gemini-3.5-flash` via `@google/genai`) |
-| Ports | Frontend: 3000, Backend: 5001 |
+| AI | Gemini (`gemini-3.5-flash`), Groq (`llama-3.1-8b-instant` / `llama-3.3-70b-versatile`), Ollama (`llama3.2:1b`) |
+| Email | Nodemailer via Gmail SMTP |
+| Ports | Backend: 5002 (also serves the built frontend), Dev server: 3000 |
 
 ## Prerequisites
 
 - Node.js 18+ and npm
 - PostgreSQL 16+ (installed via Homebrew)
-- Google Gemini API key (get one at https://aistudio.google.com/)
+- At least one AI API key: Gemini (https://aistudio.google.com/) or Groq (https://console.groq.com)
 
 ## Setup Instructions
 
@@ -72,12 +95,30 @@ npm install
 
 ### Step 5: Configure Environment
 
-Edit `.env` in the project root and set your Gemini API key:
+Edit `.env` in the project root. Full configuration reference:
 
-```
-GEMINI_API_KEY=your_actual_api_key_here
+```env
+# Required: Database
 DATABASE_URL=postgresql://localhost:5433/ai_cold_email_factory
-PORT=5001
+PORT=5002
+
+# Required (pick at least one AI provider):
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=gsk_your_groq_api_key
+
+# Optional: Ollama (local)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:1b
+
+# Optional: SMTP for sending test emails
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_16_char_app_password
+EMAIL_TO=your_email@gmail.com
+
+# Optional: Groq model fallback (default: chosen in UI)
+# GROQ_MODEL=llama-3.1-8b-instant
 ```
 
 ### Step 6: Run Database Schema
@@ -92,8 +133,6 @@ psql -p 5433 -d ai_cold_email_factory -f backend/schema.sql
 psql -p 5433 -d ai_cold_email_factory -f backend/seed.sql
 ```
 
-This loads dummy data for "TechForge Solutions" — a fictional IT consulting company.
-
 ### Step 8: Set Up the Frontend
 
 ```bash
@@ -101,7 +140,23 @@ cd frontend
 npm install
 ```
 
-### Step 9: Start the Application
+### Step 9: Build the Frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+### Step 10: Start the Application
+
+```bash
+cd backend
+node server.js
+```
+
+The app will be available at **http://localhost:5002**.
+
+### Development Mode (with hot-reload)
 
 **Terminal 1 — Backend:**
 ```bash
@@ -109,72 +164,87 @@ cd backend
 node server.js
 ```
 
-**Terminal 2 — Frontend:**
+**Terminal 2 — Frontend dev server:**
 ```bash
 cd frontend
 npm start
 ```
 
-The app will be available at **http://localhost:3000**.
+In dev mode, the React dev server runs on **http://localhost:3000** and proxies API requests to port 5002.
 
-## Git & GitHub Setup
-
-If you'd like to push this project to GitHub for submission or collaboration:
+### Demo via ngrok
 
 ```bash
-# 1. Create a new repository on GitHub (e.g. "ai-cold-email-factory")
-#    Do NOT initialize it with README, .gitignore, or license.
+cd backend && node server.js
 
-# 2. Link your local repo to GitHub (replace USER/REPO with your values)
-git remote add origin https://github.com/YOUR_USERNAME/ai-cold-email-factory.git
-
-# 3. Stage all current files and commit
-git add .
-git commit -m "Complete AI Cold Email Factory with Gemini 3.5 Flash"
-
-# 4. Push to GitHub
-git push -u origin main
+# In another terminal
+ngrok http 5002
 ```
 
-**Important:** The `.gitignore` already excludes `node_modules/`, `.env`, and `build/` folders. Your API key stays safe locally.
+## SMTP Setup (Send Test Emails)
 
-## Database Access
+To send test emails from the app to your inbox:
 
-PostgreSQL was installed via Homebrew and runs on port 5433. Here's how to inspect the data:
+1. **Enable 2-Step Verification** on your Google account at https://myaccount.google.com/security
+2. **Generate an App Password** at https://myaccount.google.com/apppasswords
+   - Select app: "Mail", device: "Other" → name it "AI Cold Email Factory"
+   - Copy the 16-character password
+3. Add to `.env`:
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASS=the_16_character_app_password
+   EMAIL_TO=your_email@gmail.com
+   ```
 
-```bash
-# Quick queries (no interactive shell)
-psql -p 5433 -d ai_cold_email_factory -c "SELECT COUNT(*) FROM generated_emails;"
-psql -p 5433 -d ai_cold_email_factory -c "SELECT id, recipient_name, subject_line FROM generated_emails LIMIT 10;"
-psql -p 5433 -d ai_cold_email_factory -c "SELECT * FROM email_batches ORDER BY id DESC;"
+All sent emails go to `EMAIL_TO` only — no actual cold outreach happens.
 
-# Interactive psql shell
-psql -p 5433 -d ai_cold_email_factory
+## AI Providers
 
-  # Inside psql, useful commands:
-  \dt             # List all tables
-  \d+ companies   # Show table schema and columns
-  SELECT * FROM companies;
-  SELECT * FROM target_industries;
-  SELECT * FROM generated_emails ORDER BY id DESC LIMIT 20;
-  \q              # Quit
+### Gemini (Cloud, Free Tier)
+- Model: `gemini-3.5-flash`
+- Rate limits: ~10 RPM, 1,500 RPD
+- Get key: https://aistudio.google.com/
 
-# pgAdmin (GUI alternative):
-# Open the pgAdmin app → Add Server
-#   Name: AI Cold Email Factory
-#   Host: localhost, Port: 5433
-#   Database: ai_cold_email_factory
-#   Username: (your macOS username), Password: (leave blank)
-# No password needed — Homebrew PostgreSQL uses peer/trust authentication by default.
-```
+### Groq — Llama 3.1 8B / 3.3 70B (Cloud, Free Tier)
+- **Llama 3.1 8B** (Fast) — `llama-3.1-8b-instant` — 560 t/s, 14,400 RPD, $0.05/$0.08 per 1M tokens
+- **Llama 3.3 70B** (Best Quality) — `llama-3.3-70b-versatile` — 280 t/s, 1,000 RPD, $0.59/$0.79 per 1M tokens
+- Get key: https://console.groq.com
+- Both models available on free tier (no credit card required)
+- On rate limit (429): auto-retries with exponential backoff using the `retry-after` header
+
+### Ollama — Llama 3.2 1B (Local)
+- Runs entirely on your machine
+- Requires: `ollama pull llama3.2:1b` and `ollama serve`
+
+## Rate Limit Handling
+
+All cloud AI providers implement retry logic for rate limits:
+
+| Provider | Detection | Strategy |
+|----------|-----------|----------|
+| **Gemini** | 429 status or error message match | Exponential backoff (1s, 2s, 4s + jitter), max 3 retries |
+| **Groq** | 429 status + `retry-after` header | Uses `retry-after` value from response, max 3 retries |
+| **Ollama** | Local — no rate limits | N/A |
+
+After retries are exhausted, the batch continues with remaining emails (graceful degradation).
 
 ## Usage Guide
 
-1. **Dashboard** (`/`) — View company stats and quick actions
-2. **Setup** (`/setup`) — Enter your company name, description, services, case studies, pricing, and target industries
-3. **Generate** (`/generate`) — Select target industry, set email count (1-500), and start generation
-4. **Batches** (`/batches`) — View all generation batches with progress
-5. **Results** (`/emails/:batchId`) — View, filter, search, and download generated emails as CSV
+1. **Dashboard** (`/`) — View company stats, Quick Start seed data
+2. **Setup** (`/setup`) — Enter your company info, services, case studies, pricing, and target industries
+3. **Generate** (`/generate`) — Pick AI model, target industry, count, and start generation
+4. **Batches** (`/batches`) — View all batches with progress and status
+5. **Results** (`/emails/:batchId`) — View emails, **check boxes to select**, click **"Send Selected"** to send to your inbox, or click **"View"** → **"Send Test Email"** for individual sends
+
+### Sending Test Emails Flow
+
+1. Go to any batch results
+2. Check the emails you want to preview
+3. Click **"Send Selected (N)"** in the top bar
+4. All selected emails arrive in your inbox at `EMAIL_TO`
+5. Or click **"View"** on any email → **"Send Test Email"** button in the modal
 
 ## API Endpoints
 
@@ -209,69 +279,25 @@ psql -p 5433 -d ai_cold_email_factory
 | GET | `/api/emails/detail/:id` | Get single email detail |
 | PUT | `/api/emails/:id` | Update email (mark as sent) |
 | DELETE | `/api/emails/:id` | Delete email |
+| POST | `/api/emails/send/:id` | Send single test email via SMTP |
+| POST | `/api/emails/send-batch` | Send multiple selected test emails |
 | GET | `/api/health` | Health check endpoint |
+| POST | `/api/seed-demo` | Seed sample data for quick start |
 
-## AI Model Selection: Why Gemini 3.5 Flash
+## Database Access
 
-We evaluated all free-tier Gemini models and selected `gemini-3.5-flash` (released May 2026) as the best balance of quality, speed, and rate limits:
+```bash
+# Quick queries
+psql -p 5433 -d ai_cold_email_factory -c "SELECT COUNT(*) FROM generated_emails;"
+psql -p 5433 -d ai_cold_email_factory -c "SELECT id, recipient_name, subject_line FROM generated_emails LIMIT 10;"
 
-| Model | RPM | RPD | Output Limit | Quality | Verdict |
-|-------|-----|-----|-------------|---------|---------|
-| **gemini-3.5-flash** | ~10 | 1,500 | 65,536 tokens | ★★★★★ Best | ✅ Selected |
-| gemini-3.1-flash-lite | ~15 | 1,500 | 8,192 tokens | ★★★★☆ | Lower output limit |
-| gemini-2.0-flash-lite | ~30 | 1,500 | 8,192 tokens | ★★★☆☆ | Older, lower quality |
-
-**Why not Flash-Lite?** Its 8K output token limit caused JSON truncation during testing — emails were cut off mid-generation. Gemini 3.5 Flash's 65K output limit eliminates this issue entirely.
-
-**Rate limit strategy:** At ~10 RPM with 5 emails per call, we can generate ~7,500 emails per day on the free tier. The app splits large batches into concurrent sub-batches of 5, with exponential backoff on retries.
-
-## Prompt Engineering Strategy
-
-The Gemini prompt is carefully engineered to ensure variety across 5 dimensions:
-
-1. **Subject Lines** — Question, Benefit, Curiosity Gap, Personalized, Urgency
-2. **Opening Hooks** — Industry Stat, Pain Point, Compliment, Question, Story
-3. **CTAs** — Schedule Call, Request Demo, Free Consultation, Download Resource, Reply
-4. **Body Structures** — Problem-Solution, AIDA, Storytelling, Value-First, Social Proof
-5. **Tone & Length** — Formal, Semi-formal, Conversational; Short, Medium, Long
-
-## Assumptions Made
-
-- Single company per deployment (no multi-tenancy)
-- PostgreSQL runs locally on port 5433 (Homebrew PostgreSQL 16 default)
-- Gemini 3.5 Flash (`gemini-3.5-flash`) is the generation model — the fastest, cheapest Gemini model as of May 2026 with 1,500 requests/day on the free tier
-- Email generation happens asynchronously via `setImmediate` with polling-based progress tracking
-- Maximum 500 emails per batch to stay within daily free-tier API quotas
-- Sub-batches of 5 emails per API call for reliable JSON responses
-- Three concurrent Gemini API calls maximum to avoid hitting the 10 RPM rate limit
-- Single-page application served separately from the API backend
-
-## Features to Add With More Time
-
-### Email Operations
-- **Email Sending Integration** — Connect SendGrid, AWS SES, or SMTP to send campaigns directly from the app
-- **Reply Detection** — Auto-detect replies via webhooks and mark engaged leads
-- **Scheduled Sending** — Timezone-aware delivery queues with daily sending caps per industry (following CAN-SPAM best practices)
-- **Bounce & Spam Tracking** — Parse delivery webhooks to remove invalid addresses
-
-### Content & Quality
-- **A/B Testing** — Generate multiple subject line / CTA variants per recipient, track which performs best
-- **Spam Score Checker** — Pre-send checks using SpamAssassin or similar
-- **Email Template Editor** — Drag-and-drop editor to customize the email HTML layout
-- **Language & Tone Customization** — Adjust formality, length, and cultural references per recipient persona
-
-### Analytics & CRM
-- **Analytics Dashboard** — Open rates, reply rates, bounce rates, and conversion tracking
-- **Lead Scoring** — Score recipients based on engagement signals
-- **CRM Integration** — Import leads from HubSpot, Salesforce, or CSV; sync sent emails and replies back
-- **Pipeline Tracking** — Track email → reply → meeting → deal conversion
-
-### Platform & Scale
-- **User Authentication** — Multi-tenant accounts with team collaboration
-- **Batch API** — Use Gemini's Batch API endpoint for higher throughput (avoids 10 RPM limit)
-- **Rate Limit Mgmt** — Adaptive rate limiter that respects daily quotas and backs off on 429s
-- **CSV Lead Import** — Bulk upload recipient lists with merge tag mapping
-- **Deployment** — Docker setup for one-command deployment to any cloud provider
+# Interactive shell
+psql -p 5433 -d ai_cold_email_factory
+  \dt             # List all tables
+  SELECT * FROM companies;
+  SELECT * FROM generated_emails ORDER BY id DESC LIMIT 20;
+  \q              # Quit
+```
 
 ## License
 

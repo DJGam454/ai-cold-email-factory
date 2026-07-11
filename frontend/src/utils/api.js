@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5001/api';
+const API_BASE = '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -53,6 +53,8 @@ export const emailsApi = {
   update: (id, data) => api.put(`/emails/${id}`, data),
   delete: (id) => api.delete(`/emails/${id}`),
   getCsvUrl: (batchId) => `${API_BASE}/emails/${batchId}/csv`,
+  sendEmail: (id) => api.post(`/emails/send/${id}`),
+  sendBatchEmails: (ids) => api.post('/emails/send-batch', { ids }),
 };
 
 export default api;
